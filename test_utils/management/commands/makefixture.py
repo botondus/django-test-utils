@@ -178,7 +178,7 @@ class Command(LabelCommand):
             search, pks = label, ''
             if '[' in label:
                 search, pks = label.split('[', 1)
-            slice = ''
+            slice = None
             if ':' in pks:
                 slice = pks.rstrip(']').split(':', 1)
             elif pks:
