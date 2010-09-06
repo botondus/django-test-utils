@@ -36,15 +36,17 @@ once, and use options of dumpdata:
 #v0.1 -- current version
 #known issues:
 #no support for generic relations
-#no support for one-to-one relations
 from optparse import make_option
 from django.core import serializers
 from django.core.management.base import BaseCommand
 from django.core.management.base import CommandError
 from django.core.management.base import LabelCommand
-from django.db.models.fields.related import ForeignKey
+from django.core.exceptions import ObjectDoesNotExist
+from django.db.models.fields.related import ForeignKey, OneToOneField,\
+    OneToOneRel
 from django.db.models.fields.related import ManyToManyField
 from django.db.models.loading import get_models
+
 
 DEBUG = False
 
@@ -124,7 +126,7 @@ class Command(LabelCommand):
                         print "Adding %s[%s]" % (model_name(x), x.pk)
                     # follow forward relation fields
                     for f in x.__class__._meta.fields + x.__class__._meta.many_to_many:
-                        if isinstance(f, ForeignKey):
+                        if isinstance(f, ForeignKey) or isinstance(f, OneToOneField):
                             new = getattr(x, f.name) # instantiate object
                             if new and not (new.__class__, new.pk) in collected:
                                 collected.add((new.__class__, new.pk))
@@ -141,6 +143,17 @@ class Command(LabelCommand):
                             if new and not (new.__class__, new.pk) in collected:
                                 collected.add((new.__class__, new.pk))
                                 related.append(new)
+                    # always follow reverse one-to-one relations unless --skip-related
+                    for related_object in x._meta.get_all_related_objects():
+                        if isinstance(related_object.field.rel, OneToOneRel):
+                            try:
+                                new = getattr(x, related_object.get_accessor_name())
+                            except ObjectDoesNotExist:
+                                pass
+                            else:
+                                if new and not (new.__class__, new.pk) in collected:
+                                    collected.add((new.__class__, new.pk))
+                                    related.append(new)
                 objects = related
                 all.extend(objects)
         
