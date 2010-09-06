@@ -34,8 +34,6 @@ once, and use options of dumpdata:
 #save into anyapp/management/commands/makefixture.py
 #or back into django/core/management/commands/makefixture.py
 #v0.1 -- current version
-#known issues:
-#no support for generic relations
 from optparse import make_option
 from django.core import serializers
 from django.core.management.base import BaseCommand
@@ -46,6 +44,7 @@ from django.db.models.fields.related import ForeignKey, OneToOneField,\
     OneToOneRel
 from django.db.models.fields.related import ManyToManyField
 from django.db.models.loading import get_models
+from django.contrib.contenttypes.generic import GenericForeignKey
 
 
 DEBUG = False
@@ -125,8 +124,9 @@ class Command(LabelCommand):
                     if DEBUG:
                         print "Adding %s[%s]" % (model_name(x), x.pk)
                     # follow forward relation fields
-                    for f in x.__class__._meta.fields + x.__class__._meta.many_to_many:
-                        if isinstance(f, ForeignKey) or isinstance(f, OneToOneField):
+                    opts = x.__class__._meta
+                    for f in opts.fields + opts.many_to_many + opts.virtual_fields:
+                        if type(f) in [ForeignKey, OneToOneField, GenericForeignKey]:
                             new = getattr(x, f.name) # instantiate object
                             if new and not (new.__class__, new.pk) in collected:
                                 collected.add((new.__class__, new.pk))
