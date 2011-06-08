@@ -29,6 +29,12 @@ class Command(BaseCommand):
             help='Pass -t to time your requests.'),
         make_option('--enable-plugin', action='append', dest='plugins', default=[],
             help='Enable the specified plugin'),
+        make_option("-o", '--output-dir', action='store', dest='output_dir', default=None,
+            help='If specified, store plugin output in the provided directory'),
+        make_option('--no-parent', action='store_true', dest="no_parent", default=False,
+            help='Do not crawl URLs which do not start with your base URL'),
+        make_option('-a', "--auth", action='store', dest='auth', default=None,
+            help='Authenticate (login:user,password:secret) before crawl')
     )
 
     help = "Displays all of the url matching routes for the project."
@@ -37,6 +43,8 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         verbosity = int(options.get('verbosity', 1))
         depth = int(options.get('depth', 3))
+
+        auth = _parse_auth(options.get('auth'))
 
         if verbosity > 1:
             log_level = logging.DEBUG
@@ -55,7 +63,7 @@ class Command(BaseCommand):
 
         console = logging.StreamHandler()
         console.setLevel(log_level)
-        console.setFormatter(logging.Formatter('%(name)-12s: %(levelname)-8s %(message)s'))
+        console.setFormatter(logging.Formatter("%(name)s [%(levelname)s] %(module)s: %(message)s"))
 
         crawl_logger.addHandler(console)
 
@@ -85,6 +93,14 @@ class Command(BaseCommand):
                 func_name = hasattr(func, '__name__') and func.__name__ or repr(func)
                 conf_urls[regex] = ['func.__module__', func_name]
 
+        c = Crawler(start_url,
+            conf_urls=conf_urls,
+            verbosity=verbosity,
+            output_dir=options.get("output_dir"),
+            ascend=not options.get("no_parent"),
+            auth=auth,
+        )
+
         # Load plugins:
         for p in options['plugins']:
             # This nested try is somewhat unsightly but allows easy Pythonic
@@ -95,16 +111,18 @@ class Command(BaseCommand):
                     plugin_module = __import__(p)
                 except ImportError:
                     if not "." in p:
-                        plugin_module = __import__("test_utils.crawler.plugins.%s" % p)
+                        plugin_module = __import__(
+                            "test_utils.crawler.plugins.%s" % p,
+                            fromlist=["test_utils.crawler.plugins"]
+                        )
                     else:
                         raise
 
-                plugin_module.active = True
-            except ImportError, e:
+                c.plugins.append(plugin_module.PLUGIN())
+            except (ImportError, AttributeError), e:
                 crawl_logger.critical("Unable to load plugin %s: %s", p, e)
                 sys.exit(3)
 
-        c = Crawler(start_url, conf_urls=conf_urls, verbosity=verbosity)
         c.run(max_depth=depth)
 
         # We'll exit with a non-zero status if we had any errors
@@ -115,3 +133,19 @@ class Command(BaseCommand):
             sys.exit(1)
         else:
             sys.exit(0)
+
+
+def _parse_auth(auth):
+    """
+    Parse auth string and return dict.
+
+    >>> _parse_auth('login:user,password:secret')
+    {'login': 'user', 'password': 'secret'}
+
+    >>> _parse_auth('name:user, token:top:secret')
+    {'name': 'user', 'token': 'top:secret'}
+    """
+    if not auth:
+        return None
+    items = auth.split(',')
+    return dict(i.strip().split(':', 1) for i in items)
