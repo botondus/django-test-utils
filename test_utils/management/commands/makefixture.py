@@ -63,6 +63,8 @@ class Command(LabelCommand):
             help="Reverse relations to follow (e.g. 'Job.task_set')."),
         make_option('--format', default='json', dest='format',
             help='Specifies the output serialization format for fixtures.'),
+        make_option('-n', '--natural', action='store_true', dest='use_natural_keys', default=False,
+            help='Use natural keys if they are available.'),
         make_option('--indent', default=None, dest='indent', type='int',
             help='Specifies the indent level to use when pretty-printing output'),
     )
@@ -89,6 +91,7 @@ class Command(LabelCommand):
         show_traceback = options.get('traceback', False)
         propagate = options.get('propagate', True)
         follow_reverse = self.handle_reverse(**options)
+        use_natural_keys = options.get('use_natural_keys', False)
 
         # Check that the serialization format exists; this is a shortcut to
         # avoid collating all the objects and _then_ failing.
@@ -158,7 +161,7 @@ class Command(LabelCommand):
                 all.extend(objects)
 
         try:
-            return serializers.serialize(format, all, indent=indent)
+            return serializers.serialize(format, all, indent=indent, use_natural_keys=use_natural_keys)
         except Exception, e:
             if show_traceback:
                 raise
